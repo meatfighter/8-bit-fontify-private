@@ -1,3 +1,3 @@
-import { extractGlyphs } from './glyphs';
+import { processGlyphs } from './glyphs';
 
-await extractGlyphs();
+await processGlyphs();
