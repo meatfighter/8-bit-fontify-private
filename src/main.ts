@@ -1,1 +1,3 @@
-console.log('Hello, World!');
+import { extractGlyphs } from './glyphs';
+
+await extractGlyphs();
