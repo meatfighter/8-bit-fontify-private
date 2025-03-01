@@ -4,12 +4,7 @@ import sharp from 'sharp';
 const FONTS_DIR = "C:/js-projects/8-bit-fontify-private/fonts";
 const GLYPHS_DIR = "C:/js-projects/8-bit-fontify-private/glyphs";
 
-const GLYPH_SHADES_0 = 17;
-const GLYPH_SHADES_1 = 13;
-const GLYPH_SHADES_2 = 13;
-const GLYPH_SHADES_3 = 10;
-
-const GLYPHS_PER_ROW = 32;
+const SHADES = 17;
 
 type Glyph = boolean[][];
 type GlyphList = Glyph[];
@@ -24,8 +19,8 @@ const glyphs: GlyphList = [];
 const glyphsSet = new Set<string>();
 const distinctGlyphs: DistinctGlyphs[] = [];
 
-const glyphShades: NumberList[][][][] = new Array<NumberList[][][]>(GLYPH_SHADES_0);
-const closestGlyphs: number[][][][] = new Array<number[][][]>(GLYPH_SHADES_0);
+const glyphShades: NumberList[][][][] = new Array<NumberList[][][]>(SHADES);
+const closestGlyphs: number[][][][] = new Array<number[][][]>(SHADES);
 
 function readPixel(data: Buffer, width: number, x: number, y: number): boolean {
     return data[3 * (width * y + x)] > 0x7F;
@@ -110,6 +105,26 @@ function readGlyph(data: Buffer, width: number, x: number, y: number): Glyph | u
         glyph[7] = row0;
     }
 
+    outer: {
+        for (let i = 0; i < 8; ++i) {
+            for (let j = 0; j < 8; ++j) {
+                if (j === 5 && i < 7) {
+                    if (!glyph[i][j]) {
+                        break outer;
+                    }
+                } else if (i === 3 && j < 5) {
+                    if (!glyph[i][j]) {
+                        break outer;
+                    }
+                } else if (glyph[i][j]) {
+                    break outer;
+                }
+            }
+        }
+        printGlyph(glyph);
+        throw new Error(`Found bad glyph: ${x} ${y} ${width}`);
+    }
+
     return glyph;
 }
 
@@ -124,10 +139,20 @@ function printGlyph(glyph: Glyph) {
     console.log();
 }
 
-async function processFontFile(file: string) {
-    const { data, info } = await sharp(`${FONTS_DIR}/${file}`).raw().toBuffer({ resolveWithObject: true });
+async function processFontFile(filename: string) {    
+    const { data, info } = await sharp(`${FONTS_DIR}/${filename}`).raw().toBuffer({ resolveWithObject: true });
     const { width, height } = info;
-    const inc = (width % 10 === 0) ? 10 : (width % 9 === 0) ? 9 : 8;
+    let inc: number;
+    if (width % 8 === 0) {
+        inc = 8;
+    } else if (width % 9 === 0) {
+        inc = 9;
+    } else if (width % 10 === 0) {
+        inc = 10;
+    } else {
+        throw new Error(`Invalid width ${width}: ${filename}`);
+    }
+    console.log(`processing: ${filename} ${width} ${inc}`);
     for (let y = 0; y < height; y += inc) {
         for (let x = 0; x < width; x += inc) {
             const glyph = readGlyph(data, width, x, y);
@@ -158,12 +183,12 @@ function computeShade(glyph: Glyph, x: number, y: number): number {
 }
 
 function partitionGlyphs() {
-    for (let s0 = 0; s0 < GLYPH_SHADES_0; ++s0) {
-        glyphShades[s0] = new Array<NumberList[][]>(GLYPH_SHADES_1);
-        for (let s1 = 0; s1 < GLYPH_SHADES_1; ++s1) {
-            glyphShades[s0][s1] = new Array<NumberList[]>(GLYPH_SHADES_2);
-            for (let s2 = 0; s2 < GLYPH_SHADES_2; ++s2) {
-                glyphShades[s0][s1][s2] = new Array<NumberList>(GLYPH_SHADES_3);
+    for (let s0 = 0; s0 < SHADES; ++s0) {
+        glyphShades[s0] = new Array<NumberList[][]>(SHADES);
+        for (let s1 = 0; s1 < SHADES; ++s1) {
+            glyphShades[s0][s1] = new Array<NumberList[]>(SHADES);
+            for (let s2 = 0; s2 < SHADES; ++s2) {
+                glyphShades[s0][s1][s2] = new Array<NumberList>(SHADES);
             }
         }
     }
@@ -185,20 +210,20 @@ function partitionGlyphs() {
 }
 
 function findClosest() {
-    for (let s0 = 0; s0 < GLYPH_SHADES_0; ++s0) {
-        closestGlyphs[s0] = new Array<number[][]>(GLYPH_SHADES_1);
-        for (let s1 = 0; s1 < GLYPH_SHADES_1; ++s1) {
-            closestGlyphs[s0][s1] = new Array<number[]>(GLYPH_SHADES_2);
-            for (let s2 = 0; s2 < GLYPH_SHADES_2; ++s2) {
-                closestGlyphs[s0][s1][s2] = new Array<number>(GLYPH_SHADES_3);
+    for (let s0 = 0; s0 < SHADES; ++s0) {
+        closestGlyphs[s0] = new Array<number[][]>(SHADES);
+        for (let s1 = 0; s1 < SHADES; ++s1) {
+            closestGlyphs[s0][s1] = new Array<number[]>(SHADES);
+            for (let s2 = 0; s2 < SHADES; ++s2) {
+                closestGlyphs[s0][s1][s2] = new Array<number>(SHADES);
             }
         }
     }
 
-    for (let s0 = 0; s0 < GLYPH_SHADES_0; ++s0) {
-        for (let s1 = 0; s1 < GLYPH_SHADES_1; ++s1) {
-            for (let s2 = 0; s2 < GLYPH_SHADES_2; ++s2) {
-                for (let s3 = 0; s3 < GLYPH_SHADES_3; ++s3) {
+    for (let s0 = 0; s0 < SHADES; ++s0) {
+        for (let s1 = 0; s1 < SHADES; ++s1) {
+            for (let s2 = 0; s2 < SHADES; ++s2) {
+                for (let s3 = 0; s3 < SHADES; ++s3) {
                     let minD2 = Number.MAX_VALUE;
                     let minI = Number.MAX_VALUE;
                     for (let i = 0; i < distinctGlyphs.length; ++i) {
@@ -213,7 +238,7 @@ function findClosest() {
                             minI = i;
                         }                      
                     }
-                    closestGlyphs[s0][s1][s2][s3] = minI;                    
+                    closestGlyphs[s0][s1][s2][s3] = minI;
                 }
             }
         }
@@ -221,13 +246,14 @@ function findClosest() {
 }
 
 async function saveImage() {
-    const imageWidth = 8 * GLYPHS_PER_ROW;
-    const cols = Math.ceil(glyphs.length / GLYPHS_PER_ROW);
+    const glyphsPerRow = Math.ceil(Math.sqrt(glyphs.length))
+    const imageWidth = 8 * glyphsPerRow;
+    const cols = Math.ceil(glyphs.length / glyphsPerRow);
     const imageHeight = 8 * cols;
     const data = new Uint8Array(imageWidth * imageHeight);
     data.fill(0);
     outer: for (let y = 0, i = 0; y < cols; ++y) {
-        for (let x = 0; x < GLYPHS_PER_ROW; ++x, ++i) {
+        for (let x = 0; x < glyphsPerRow; ++x, ++i) {
             if (i >= glyphs.length) {
                 break outer;
             }
