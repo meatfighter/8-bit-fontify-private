@@ -1,8 +1,8 @@
-import { promises as fsPromises } from 'fs';
+import { promises as fs } from 'fs';
 import sharp from 'sharp';
 
 const FONTS_DIR = "C:/js-projects/8-bit-fontify-private/fonts";
-const GLYPHS_DIR = "C:/js-projects/8-bit-fontify-private/glyphs";
+const OUT_DIR = "C:/js-projects/8-bit-fontify-private/out";
 
 const SHADES = 17;
 
@@ -267,18 +267,49 @@ async function saveImage() {
             height: imageHeight,
             channels: 1,
         },
-    }).png().toFile(`${GLYPHS_DIR}/glyphs.png`);
+    }).threshold(128).webp({ lossless: true }).toFile(`${OUT_DIR}/glyphs.webp`);
+}
+
+async function writeBinaryFile(filePath: string, data: NumberList) {
+    const buffer = Buffer.alloc(2 * data.length);
+    data.forEach((num, index) => buffer.writeUInt16LE(num, 2 * index));
+    await fs.writeFile(filePath, buffer);
+}
+
+async function writeDistinctTable() {
+    const data: NumberList = [];
+    for (const dg of distinctGlyphs) {
+        data.push(...dg.s);
+        data.push(dg.indicies.length);
+        data.push(...dg.indicies);
+    }
+    writeBinaryFile(`${OUT_DIR}/distinct.bin`, data);
+}
+
+async function writeClosestTable() {
+    const data: NumberList = [];
+    for (let s0 = 0; s0 < SHADES; ++s0) {
+        for (let s1 = 0; s1 < SHADES; ++s1) {
+            for (let s2 = 0; s2 < SHADES; ++s2) {
+                for (let s3 = 0; s3 < SHADES; ++s3) {
+                    data.push(closestGlyphs[s0][s1][s2][s3]);
+                }
+            }
+        }
+    }
+    writeBinaryFile(`${OUT_DIR}/closest.bin`, data);
 }
 
 async function saveResults() {
+    fs.mkdir(`${OUT_DIR}`);
     await saveImage();
-
-    // TODO SAVE TABLE
+    await writeDistinctTable();
+    await writeClosestTable();
 }
 
 export async function processGlyphs() {
     console.log('started');
-    for(const file of await fsPromises.readdir(FONTS_DIR)) {
+    for(const file of await fs.readdir(FONTS_DIR)) {
         await processFontFile(file);
     }
     glyphsSet.clear();
